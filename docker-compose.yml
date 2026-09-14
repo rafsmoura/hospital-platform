@@ -44,6 +44,7 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-hospital}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-dev-only}
+      OUTBOX_RELAY_ENABLED: ${OUTBOX_RELAY_ENABLED:-true}
     ports:
       - "8081:8081"
     depends_on:
@@ -71,6 +72,7 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-hospital}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-dev-only}
+      HISTORY_MAX_RETRIES: ${HISTORY_MAX_RETRIES:-3}
     ports:
       - "8082:8082"
     depends_on:
@@ -98,6 +100,7 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_USER:-hospital}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-dev-only}
+      NOTIFICATION_MAX_RETRIES: ${NOTIFICATION_MAX_RETRIES:-3}
     ports:
       - "8083:8083"
     depends_on:

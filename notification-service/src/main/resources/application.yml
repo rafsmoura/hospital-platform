@@ -28,6 +28,9 @@ spring:
         acknowledge-mode: manual
         default-requeue-rejected: false
 
+notification:
+  max-retries: ${NOTIFICATION_MAX_RETRIES:3}
+
 management:
   endpoints:
     web:

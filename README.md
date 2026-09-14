@@ -7,7 +7,7 @@ Backend demonstrativo para agendamento de consultas, historico via GraphQL e pro
 - `scheduling-service` e dono de usuarios, consultas e outbox.
 - `history-service` consome eventos e mantem a projecao consultada por GraphQL.
 - `notification-service` consome eventos e persiste o resultado simulado do lembrete.
-- PostgreSQL e compartilhado apenas para a tabela minima `users`; cada servico mantem suas tabelas de dominio.
+- PostgreSQL e compartilhado apenas para a tabela minima `identity.users`; cada servico mantem suas tabelas de dominio.
 - RabbitMQ distribui eventos de consulta para uma fila de historico e uma fila de notificacoes.
 
 ## Pre-requisitos
@@ -17,7 +17,7 @@ Backend demonstrativo para agendamento de consultas, historico via GraphQL e pro
 - Docker Desktop ou Docker Engine com Compose V2 para executar o ambiente completo.
 - Portas livres `5432`, `5672`, `8081`, `8082`, `8083` e `15672`.
 
-O daemon Docker e necessario para PostgreSQL, RabbitMQ e os containers dos servicos. Sem Docker, os testes locais usam H2 e doubles em processo; esse modo nao valida um broker real.
+O daemon Docker e necessario para PostgreSQL, RabbitMQ e os containers dos servicos. As suites H2 podem ser executadas sem Docker de forma seletiva; o `mvn -q verify` completo inclui a suite Testcontainers e exige um daemon ativo.
 
 ## Execucao Com Compose
 
@@ -51,7 +51,7 @@ Valide compilacao, testes e empacotamento dos quatro modulos:
 mvn -q verify
 ```
 
-Os jars executaveis ficam em `scheduling-service/target`, `history-service/target` e `notification-service/target`. O teste E2E local usa H2 e entrega de mensagens em processo quando o daemon Docker nao esta disponivel. O fluxo RabbitMQ real deve ser validado com `docker compose up --build`.
+Os jars executaveis ficam em `scheduling-service/target`, `history-service/target` e `notification-service/target`. O teste E2E local usa H2 e entrega de mensagens em processo. Os testes de topologia RabbitMQ usam Testcontainers e exigem Docker.
 
 ## Configuracao
 
@@ -69,6 +69,9 @@ Os servicos aceitam as variaveis abaixo. Os valores apos `:` sao defaults locais
 | `RABBITMQ_PASSWORD` | cada servico | `local-dev-only` |
 | `OUTBOX_RELAY_DELAY_MS` | scheduling | `1000` |
 | `OUTBOX_CONFIRMATION_TIMEOUT_MS` | scheduling | `5000` |
+| `OUTBOX_RELAY_ENABLED` | scheduling | `true` |
+| `HISTORY_MAX_RETRIES` | history | `3` |
+| `NOTIFICATION_MAX_RETRIES` | notification | `3` |
 | `POSTGRES_DB` | Compose | `hospital` |
 | `POSTGRES_USER` | Compose | `hospital` |
 | `POSTGRES_PASSWORD` | Compose | `local-dev-only` |
@@ -92,7 +95,7 @@ Os health endpoints sao publicos. Os demais endpoints exigem Basic Auth.
 
 ## Usuarios Seed
 
-Cada servico que precisa autenticar usuarios aplica a mesma seed demonstrativa. A senha local de todos os usuarios seed e `password`.
+A tabela compartilhada `identity.users` recebe a mesma seed demonstrativa. A senha local de todos os usuarios seed e `password`.
 
 | Usuario | Papel | ID |
 | --- | --- | --- |
@@ -222,7 +225,7 @@ O contrato `AppointmentEvent` contem `eventVersion`, `messageId`, `eventType`, `
 ### Retry, DLQ E Duplicidade
 
 - O outbox comeca como `PENDING`; confirmacao RabbitMQ marca `PUBLISHED`. Falha de confirmacao marca `FAILED`, preserva erro, tentativas e proximo horario, e permite novo relay.
-- O consumer de notificacoes reenvia falhas transientes ate tres tentativas usando o header `x-notification-retry`. Depois rejeita sem requeue e o RabbitMQ encaminha para a DLQ.
+- Os consumers repetem falhas transientes ate tres retries, conforme `HISTORY_MAX_RETRIES` e `NOTIFICATION_MAX_RETRIES`. Depois rejeitam sem requeue e o RabbitMQ encaminha para a DLQ usando o routing key original.
 - Eventos invalidos sao registrados como falha, rejeitados e nao criam lembrete de sucesso.
 - History e notification mantem estado de `messageId` separado. Duplicatas sao reconhecidas sem repetir projecao ou lembrete.
 - Uma consulta cancelada gera `CONSULTA_EDITADA`; o notification log registra `SKIPPED_CANCELLED`, sem `SENT`.

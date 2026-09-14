@@ -5,8 +5,9 @@ import com.fiap.hospital.scheduling.outbox.OutboxEventRepository;
 import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@ConditionalOnProperty(name = "outbox.relay-enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxPublisher {
 
     private static final String APPOINTMENT_EXCHANGE = "hospital.appointments";
@@ -60,6 +62,10 @@ public class OutboxPublisher {
                     .get(confirmationTimeoutMillis, TimeUnit.MILLISECONDS);
             if (confirm == null || !confirm.isAck()) {
                 throw new IllegalStateException(confirm == null ? "publisher confirmation missing" : confirm.getReason());
+            }
+            if (correlationData.getReturned() != null) {
+                throw new IllegalStateException("message returned: "
+                        + correlationData.getReturned().getReplyText());
             }
             event.markPublished(now);
         } catch (Exception exception) {

@@ -18,4 +18,5 @@ spring:
         auto-startup: false
 
 outbox:
+  relay-enabled: false
   relay-delay-ms: 3600000

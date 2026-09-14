@@ -15,11 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -28,7 +26,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
@@ -57,9 +54,6 @@ class AppointmentNotificationConsumerIntegrationTest {
 
     @SpyBean
     private NotificationLogRepository notificationLogStore;
-
-    @MockBean
-    private RabbitTemplate rabbitTemplate;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -162,33 +156,19 @@ class AppointmentNotificationConsumerIntegrationTest {
         doThrow(new IllegalStateException("database unavailable"))
                 .when(notificationLogStore).save(any(NotificationLog.class));
 
-        Message first = message(created, 81L);
-        consumer.onMessage(first, channel);
-        Message second = retryMessage(first, 1);
-        consumer.onMessage(second, channel);
-        Message third = retryMessage(second, 2);
-        consumer.onMessage(third, channel);
-        Message fourth = retryMessage(third, 3);
-        consumer.onMessage(fourth, channel);
+        consumer.onMessage(message(created, 81L), channel);
 
         assertThat(notificationLogs.count()).isZero();
         assertThat(failures.count()).isEqualTo(1);
         assertThat(failures.findAll().get(0).getFailureReason()).contains("database unavailable");
-        verify(rabbitTemplate, times(3)).send(any(String.class), any(String.class), any(Message.class));
-        verify(channel).basicReject(anyLong(), org.mockito.ArgumentMatchers.eq(false));
+        verify(notificationLogStore, times(4)).save(any(NotificationLog.class));
+        verify(channel).basicReject(81L, false);
     }
 
     private Message message(AppointmentEvent event, long deliveryTag) throws Exception {
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryTag(deliveryTag);
         return new Message(objectMapper.writeValueAsBytes(event), properties);
-    }
-
-    private Message retryMessage(Message original, int retryCount) {
-        MessageProperties properties = new MessageProperties();
-        properties.getHeaders().putAll(original.getMessageProperties().getHeaders());
-        properties.setHeader("x-notification-retry", retryCount);
-        return new Message(original.getBody(), properties);
     }
 
     private AppointmentEvent event(UUID messageId, EventType eventType, AppointmentStatus status,

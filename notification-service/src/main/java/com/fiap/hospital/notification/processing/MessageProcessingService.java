@@ -9,8 +9,8 @@ import com.fiap.hospital.notification.persistence.NotificationProcessedMessageRe
 import com.fiap.hospital.notification.persistence.NotificationProcessingFailure;
 import com.fiap.hospital.notification.persistence.NotificationProcessingFailureRepository;
 import com.fiap.hospital.notification.persistence.NotificationStatus;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;

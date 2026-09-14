@@ -24,6 +24,9 @@ spring:
     username: ${RABBITMQ_USERNAME:hospital}
     password: ${RABBITMQ_PASSWORD:local-dev-only}
     publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 outbox:
   relay-delay-ms: ${OUTBOX_RELAY_DELAY_MS:1000}

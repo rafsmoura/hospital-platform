@@ -11,11 +11,14 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
@@ -30,7 +33,7 @@ class AppointmentProjectionConsumerIntegrationTest {
     @Autowired
     private AppointmentProjectionConsumer consumer;
 
-    @Autowired
+    @SpyBean
     private HistoryAppointmentRepository appointments;
 
     @Autowired
@@ -112,6 +115,25 @@ class AppointmentProjectionConsumerIntegrationTest {
         assertThat(failures.count()).isEqualTo(1);
         assertThat(failures.findAll().get(0).getFailureReason()).contains("eventVersion");
         verify(channel).basicReject(31L, false);
+    }
+
+    @Test
+    void transientProjectionFailureRetriesThreeTimesBeforeRejecting() throws Exception {
+        AppointmentEvent event = event(UUID.fromString("55555555-5555-5555-5555-555555555555"),
+                EventType.CONSULTA_CRIADA, Instant.parse("2026-09-14T10:00:00Z"),
+                AppointmentStatus.AGENDADA, Instant.parse("2026-09-20T14:00:00Z"), "Retry");
+        doThrow(new IllegalStateException("database unavailable"))
+                .when(appointments).save(any(HistoryAppointment.class));
+        Channel channel = mock(Channel.class);
+
+        consumer.onMessage(message(event, 32L), channel);
+
+        assertThat(appointments.count()).isZero();
+        assertThat(processedMessages.count()).isZero();
+        assertThat(failures.count()).isEqualTo(1);
+        assertThat(failures.findAll().get(0).getFailureReason()).contains("database unavailable");
+        verify(appointments, times(4)).save(any(HistoryAppointment.class));
+        verify(channel).basicReject(32L, false);
     }
 
     private Message message(AppointmentEvent event, long deliveryTag) throws Exception {

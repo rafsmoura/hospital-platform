@@ -9,33 +9,28 @@ import com.rabbitmq.client.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 @Service
 public class AppointmentNotificationConsumer {
 
     static final String QUEUE = "hospital.notifications.appointments";
-    static final String RETRY_HEADER = "x-notification-retry";
-    static final int MAX_RETRIES = 3;
     private static final Logger log = LoggerFactory.getLogger(AppointmentNotificationConsumer.class);
 
     private final MessageProcessingService processingService;
     private final ObjectMapper objectMapper;
-    private final RabbitTemplate rabbitTemplate;
+    private final RetryTemplate retryTemplate;
 
-    @Autowired
     public AppointmentNotificationConsumer(MessageProcessingService processingService,
-                                           ObjectMapper objectMapper, RabbitTemplate rabbitTemplate) {
+                                           ObjectMapper objectMapper, RetryTemplate retryTemplate) {
         this.processingService = processingService;
         this.objectMapper = objectMapper;
-        this.rabbitTemplate = rabbitTemplate;
+        this.retryTemplate = retryTemplate;
     }
 
     @RabbitListener(queues = QUEUE, ackMode = "MANUAL")
@@ -45,54 +40,26 @@ public class AppointmentNotificationConsumer {
             event = objectMapper.readValue(message.getBody(), AppointmentEvent.class);
             validate(event);
         } catch (JsonProcessingException | InvalidAppointmentEventException exception) {
-            processingService.recordFailure(null, exception.getMessage(), new String(message.getBody()));
+            processingService.recordFailure(null, exception.getMessage(),
+                    new String(message.getBody(), StandardCharsets.UTF_8));
             channel.basicReject(message.getMessageProperties().getDeliveryTag(), false);
             return;
         }
 
         try {
-            processingService.process(event);
-            channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
-            log.info("appointment reminder processed messageId={} appointmentId={} patientId={} eventType={} status={}",
-                    event.messageId(), event.appointmentId(), event.patientId(), event.eventType(), event.status());
+            retryTemplate.execute(context -> {
+                processingService.process(event);
+                return null;
+            });
         } catch (RuntimeException exception) {
-            handleTransientFailure(message, channel, event, exception);
-        }
-    }
-
-    private void handleTransientFailure(Message message, Channel channel, AppointmentEvent event,
-                                       RuntimeException exception) throws IOException {
-        int retryCount = retryCount(message);
-        if (retryCount < MAX_RETRIES) {
-            MessageProperties properties = new MessageProperties();
-            properties.getHeaders().putAll(message.getMessageProperties().getHeaders());
-            properties.setHeader(RETRY_HEADER, retryCount + 1);
-            try {
-                rabbitTemplate.send("", QUEUE, new Message(message.getBody(), properties));
-                channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
-            } catch (RuntimeException publishFailure) {
-                channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
-            }
+            processingService.recordFailure(event.messageId(), exception.getMessage(), null);
+            channel.basicReject(message.getMessageProperties().getDeliveryTag(), false);
             return;
         }
 
-        processingService.recordFailure(event.messageId(), exception.getMessage(), null);
-        channel.basicReject(message.getMessageProperties().getDeliveryTag(), false);
-    }
-
-    private int retryCount(Message message) {
-        Object value = message.getMessageProperties().getHeaders().get(RETRY_HEADER);
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value instanceof String text) {
-            try {
-                return Integer.parseInt(text);
-            } catch (NumberFormatException ignored) {
-                return MAX_RETRIES;
-            }
-        }
-        return 0;
+        channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
+        log.info("appointment reminder processed messageId={} appointmentId={} patientId={} eventType={} status={}",
+                event.messageId(), event.appointmentId(), event.patientId(), event.eventType(), event.status());
     }
 
     private void validate(AppointmentEvent event) {

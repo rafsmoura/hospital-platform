@@ -13,6 +13,7 @@ import com.fiap.hospital.history.projection.HistoryAppointmentRepository;
 import com.fiap.hospital.history.projection.HistoryProcessedMessage;
 import com.fiap.hospital.history.projection.HistoryProcessedMessageRepository;
 import com.fiap.hospital.history.projection.HistoryProcessingFailureRepository;
+import com.fiap.hospital.history.projection.HistoryProjectionService;
 import com.fiap.hospital.history.security.PatientAccessPolicy;
 import com.fiap.hospital.history.user.UserAccount;
 import com.fiap.hospital.history.user.UserRepository;
@@ -50,6 +51,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.retry.support.RetryTemplate;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -78,8 +80,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Deterministic local E2E fallback. Docker was unavailable, so H2 and in-process
- * consumer delivery exercise the real APIs, outbox relay, event contract and consumers.
+ * Deterministic local E2E path. H2 and in-process consumer delivery exercise the real
+ * APIs, outbox relay, event contract and consumers; RabbitMQ is covered separately.
  */
 @SpringBootTest(classes = SchedulingApplication.class, properties = {
         "spring.rabbitmq.listener.simple.auto-startup=false",
@@ -165,11 +167,12 @@ class HospitalFlowE2eTest {
         });
 
         AppointmentProjectionConsumer historyConsumer = new AppointmentProjectionConsumer(
-                historyAppointments, historyMessages, historyFailures, objectMapper);
+                new HistoryProjectionService(historyAppointments, historyMessages), historyFailures,
+                objectMapper, RetryTemplate.defaultInstance());
         MessageProcessingService processing = new MessageProcessingService(
                 notificationLogs, notificationMessages, notificationFailures);
         AppointmentNotificationConsumer notificationConsumer = new AppointmentNotificationConsumer(
-                processing, objectMapper, rabbitTemplate);
+                processing, objectMapper, RetryTemplate.defaultInstance());
         Channel channel = mock(Channel.class);
 
         for (OutboxEvent event : published) {

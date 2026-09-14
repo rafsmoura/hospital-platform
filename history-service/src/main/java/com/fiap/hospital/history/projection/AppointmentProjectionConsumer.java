@@ -7,38 +7,38 @@ import com.rabbitmq.client.Channel;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Service
 public class AppointmentProjectionConsumer {
 
-    private final HistoryAppointmentRepository appointments;
-    private final HistoryProcessedMessageRepository processedMessages;
+    private final HistoryProjectionService projectionService;
     private final HistoryProcessingFailureRepository failures;
     private final ObjectMapper objectMapper;
+    private final RetryTemplate retryTemplate;
     private final Clock clock;
 
     @Autowired
-    public AppointmentProjectionConsumer(HistoryAppointmentRepository appointments,
-                                         HistoryProcessedMessageRepository processedMessages,
+    public AppointmentProjectionConsumer(HistoryProjectionService projectionService,
                                          HistoryProcessingFailureRepository failures,
-                                         ObjectMapper objectMapper) {
-        this(appointments, processedMessages, failures, objectMapper, Clock.systemUTC());
+                                         ObjectMapper objectMapper, RetryTemplate retryTemplate) {
+        this(projectionService, failures, objectMapper, retryTemplate, Clock.systemUTC());
     }
 
-    AppointmentProjectionConsumer(HistoryAppointmentRepository appointments,
-                                   HistoryProcessedMessageRepository processedMessages,
+    AppointmentProjectionConsumer(HistoryProjectionService projectionService,
                                    HistoryProcessingFailureRepository failures,
-                                   ObjectMapper objectMapper, Clock clock) {
-        this.appointments = appointments;
-        this.processedMessages = processedMessages;
+                                   ObjectMapper objectMapper, RetryTemplate retryTemplate, Clock clock) {
+        this.projectionService = projectionService;
         this.failures = failures;
         this.objectMapper = objectMapper;
+        this.retryTemplate = retryTemplate;
         this.clock = clock;
     }
 
@@ -49,29 +49,22 @@ public class AppointmentProjectionConsumer {
             event = objectMapper.readValue(message.getBody(), AppointmentEvent.class);
             validate(event);
         } catch (JsonProcessingException | InvalidAppointmentEventException exception) {
-            recordFailure(message, exception.getMessage());
+            recordFailure(null, exception.getMessage(), message);
             channel.basicReject(message.getMessageProperties().getDeliveryTag(), false);
             return;
         }
 
-        project(event);
-        channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
-    }
-
-    @Transactional
-    void project(AppointmentEvent event) {
-        if (processedMessages.existsById(event.messageId())) {
+        try {
+            retryTemplate.execute(context -> {
+                projectionService.project(event);
+                return null;
+            });
+        } catch (RuntimeException exception) {
+            recordFailure(event.messageId(), exception.getMessage(), message);
+            channel.basicReject(message.getMessageProperties().getDeliveryTag(), false);
             return;
         }
-
-        HistoryAppointment projection = appointments.findById(event.appointmentId()).orElse(null);
-        if (projection == null) {
-            appointments.save(new HistoryAppointment(event, clock.instant()));
-        } else if (event.occurredAt().isAfter(projection.getOccurredAt())) {
-            projection.apply(event, clock.instant());
-            appointments.save(projection);
-        }
-        processedMessages.save(new HistoryProcessedMessage(event.messageId(), clock.instant()));
+        channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
     }
 
     private void validate(AppointmentEvent event) {
@@ -101,8 +94,9 @@ public class AppointmentProjectionConsumer {
         }
     }
 
-    private void recordFailure(Message message, String reason) {
+    private void recordFailure(UUID messageId, String reason, Message message) {
         Instant now = clock.instant();
-        failures.save(new HistoryProcessingFailure(null, reason, new String(message.getBody()), now));
+        failures.save(new HistoryProcessingFailure(messageId, reason,
+                new String(message.getBody(), StandardCharsets.UTF_8), now));
     }
 }
