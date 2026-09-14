@@ -1,0 +1,6 @@
+.git
+.gitignore
+.specs
+**/target
+*.pdf
+README.md

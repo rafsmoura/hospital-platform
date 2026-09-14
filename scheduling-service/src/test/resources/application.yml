@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:scheduling;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    table: scheduling_flyway_schema_history
+    locations: classpath:db/migration-scheduling
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  rabbitmq:
+    username: hospital
+    password: local-dev-only
+    listener:
+      simple:
+        auto-startup: false
+
+outbox:
+  relay-delay-ms: 3600000

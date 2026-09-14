@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:history;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    table: history_flyway_schema_history
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  rabbitmq:
+    username: hospital
+    password: local-dev-only
+    listener:
+      simple:
+        auto-startup: false

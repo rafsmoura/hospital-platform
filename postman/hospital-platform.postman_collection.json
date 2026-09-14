@@ -1,0 +1,327 @@
+{
+  "info": {
+    "_postman_id": "b7de5f5a-2bc1-4f66-9f34-82dcb8d9d9a1",
+    "name": "Hospital Platform",
+    "description": "Requests for the implemented hospital scheduling REST API and history GraphQL API. Set password, identity and appointment variables before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "schedulingUrl", "value": "http://localhost:8081" },
+    { "key": "historyUrl", "value": "http://localhost:8082" },
+    { "key": "adminUsername", "value": "admin" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "doctorUsername", "value": "medico" },
+    { "key": "doctorPassword", "value": "" },
+    { "key": "nurseUsername", "value": "enfermeiro" },
+    { "key": "nursePassword", "value": "" },
+    { "key": "patientUsername", "value": "paciente" },
+    { "key": "patientPassword", "value": "" },
+    { "key": "newUsername", "value": "" },
+    { "key": "newPassword", "value": "" },
+    { "key": "patientId", "value": "" },
+    { "key": "otherPatientId", "value": "" },
+    { "key": "doctorId", "value": "" },
+    { "key": "appointmentId", "value": "" },
+    { "key": "appointmentVersion", "value": "0" },
+    { "key": "futureScheduledAt", "value": "2030-09-20T14:00:00Z" },
+    { "key": "historyFrom", "value": "2026-01-01T00:00:00Z" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Create user",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{adminUsername}}", "type": "string" },
+                { "key": "password", "value": "{{adminPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{newUsername}}\",\n  \"password\": \"{{newPassword}}\",\n  \"role\": \"MEDICO\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/users", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "users" ] }
+          },
+          "event": [ {
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('ADMIN can create a user', function () { pm.response.to.have.status(201); });",
+              "pm.test('response does not expose credentials', function () {",
+              "  var body = pm.response.json();",
+              "  pm.expect(body).to.not.have.property('password');",
+              "  pm.expect(body).to.not.have.property('passwordHash');",
+              "});"
+            ] }
+          } ]
+        },
+        {
+          "name": "Create user as patient (403)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{patientUsername}}", "type": "string" },
+                { "key": "password", "value": "{{patientPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{newUsername}}\",\n  \"password\": \"{{newPassword}}\",\n  \"role\": \"PACIENTE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/users", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "users" ] }
+          },
+          "event": [ {
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('non-admin cannot create users', function () { pm.response.to.have.status(403); });"
+            ] }
+          } ]
+        }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "item": [
+        {
+          "name": "Create appointment as nurse",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{nurseUsername}}", "type": "string" },
+                { "key": "password", "value": "{{nursePassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"doctorId\": \"{{doctorId}}\",\n  \"scheduledAt\": \"{{futureScheduledAt}}\",\n  \"notes\": \"Postman demonstration\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments" ] }
+          },
+          "event": [ {
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('nurse can create an appointment', function () { pm.response.to.have.status(201); });",
+              "var body = pm.response.json();",
+              "pm.collectionVariables.set('appointmentId', body.id);",
+              "pm.collectionVariables.set('appointmentVersion', body.version);",
+              "pm.test('appointment starts scheduled', function () { pm.expect(body.status).to.eql('AGENDADA'); });"
+            ] }
+          } ]
+        },
+        {
+          "name": "Create appointment without authentication (401)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"doctorId\": \"{{doctorId}}\",\n  \"scheduledAt\": \"{{futureScheduledAt}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('protected REST operation requires authentication', function () { pm.response.to.have.status(401); });"
+          ] } } ]
+        },
+        {
+          "name": "Create appointment as patient (403)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{patientUsername}}", "type": "string" },
+                { "key": "password", "value": "{{patientPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"doctorId\": \"{{doctorId}}\",\n  \"scheduledAt\": \"{{futureScheduledAt}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('patient cannot create appointments', function () { pm.response.to.have.status(403); });"
+          ] } } ]
+        },
+        {
+          "name": "Get appointment as doctor",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{doctorUsername}}", "type": "string" },
+                { "key": "password", "value": "{{doctorPassword}}", "type": "string" }
+              ]
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments/{{appointmentId}}", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments", "{{appointmentId}}" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('clinical staff can read an appointment', function () { pm.response.to.have.status(200); });",
+            "pm.test('response has no credentials', function () { pm.expect(pm.response.text()).to.not.include('password'); });"
+          ] } } ]
+        },
+        {
+          "name": "Get appointment as patient (403)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{patientUsername}}", "type": "string" },
+                { "key": "password", "value": "{{patientPassword}}", "type": "string" }
+              ]
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments/{{appointmentId}}", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments", "{{appointmentId}}" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('patient cannot use staff appointment read', function () { pm.response.to.have.status(403); });"
+          ] } } ]
+        },
+        {
+          "name": "Edit appointment as doctor",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{doctorUsername}}", "type": "string" },
+                { "key": "password", "value": "{{doctorPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"doctorId\": \"{{doctorId}}\",\n  \"scheduledAt\": \"{{futureScheduledAt}}\",\n  \"status\": \"AGENDADA\",\n  \"notes\": \"Updated from Postman\",\n  \"version\": {{appointmentVersion}}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{schedulingUrl}}/api/v1/appointments/{{appointmentId}}", "host": [ "{{schedulingUrl}}" ], "path": [ "api", "v1", "appointments", "{{appointmentId}}" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('doctor can edit a scheduled appointment', function () { pm.response.to.have.status(200); });",
+            "var body = pm.response.json();",
+            "pm.collectionVariables.set('appointmentVersion', body.version);",
+            "pm.test('edit keeps appointment scheduled', function () { pm.expect(body.status).to.eql('AGENDADA'); });"
+          ] } } ]
+        }
+      ]
+    },
+    {
+      "name": "GraphQL History",
+      "item": [
+        {
+          "name": "Staff history query",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{doctorUsername}}", "type": "string" },
+                { "key": "password", "value": "{{doctorPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query($patientId: ID!, $from: String!) { patientHistory(patientId: $patientId, futureOnly: true, from: $from, sort: ASC) { id patientId doctorId scheduledAt status notes } }\",\n  \"variables\": {\n    \"patientId\": \"{{patientId}}\",\n    \"from\": \"{{historyFrom}}\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{historyUrl}}/graphql", "host": [ "{{historyUrl}}" ], "path": [ "graphql" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('staff history query succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.test('GraphQL has no errors', function () { pm.expect(pm.response.json()).to.not.have.property('errors'); });"
+          ] } } ]
+        },
+        {
+          "name": "Patient own history query",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{patientUsername}}", "type": "string" },
+                { "key": "password", "value": "{{patientPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query($patientId: ID!) { patientHistory(patientId: $patientId) { id patientId scheduledAt status notes } }\",\n  \"variables\": { \"patientId\": \"{{patientId}}\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{historyUrl}}/graphql", "host": [ "{{historyUrl}}" ], "path": [ "graphql" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('patient can query own history', function () { pm.response.to.have.status(200); });",
+            "pm.test('own history response has no errors', function () { pm.expect(pm.response.json()).to.not.have.property('errors'); });"
+          ] } } ]
+        },
+        {
+          "name": "Patient changes GraphQL patientId (403 error)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{patientUsername}}", "type": "string" },
+                { "key": "password", "value": "{{patientPassword}}", "type": "string" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query($patientId: ID!) { patientHistory(patientId: $patientId) { id patientId scheduledAt status } }\",\n  \"variables\": { \"patientId\": \"{{otherPatientId}}\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{historyUrl}}/graphql", "host": [ "{{historyUrl}}" ], "path": [ "graphql" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('patient isolation returns a GraphQL authorization error', function () {",
+            "  pm.response.to.have.status(200);",
+            "  var body = pm.response.json();",
+            "  pm.expect(body.errors).to.be.an('array').that.is.not.empty;",
+            "  pm.expect(body.data).to.not.have.property('patientHistory');",
+            "});"
+          ] } } ]
+        },
+        {
+          "name": "GraphQL without authentication (401)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ patientHistory(patientId: \\\"{{patientId}}\\\") { id } }\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{historyUrl}}/graphql", "host": [ "{{historyUrl}}" ], "path": [ "graphql" ] }
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('GraphQL endpoint requires authentication', function () { pm.response.to.have.status(401); });"
+          ] } } ]
+        }
+      ]
+    }
+  ]
+}

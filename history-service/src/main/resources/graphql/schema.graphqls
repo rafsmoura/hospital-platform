@@ -1,0 +1,29 @@
+type Query {
+    patientHistory(
+        patientId: ID!
+        futureOnly: Boolean = false
+        from: String
+        sort: AppointmentSort = ASC
+    ): [Appointment!]!
+    appointment(id: ID!): Appointment
+}
+
+type Appointment {
+    id: ID!
+    patientId: ID!
+    doctorId: ID
+    scheduledAt: String!
+    status: AppointmentStatus!
+    notes: String
+}
+
+enum AppointmentStatus {
+    AGENDADA
+    REALIZADA
+    CANCELADA
+}
+
+enum AppointmentSort {
+    ASC
+    DESC
+}

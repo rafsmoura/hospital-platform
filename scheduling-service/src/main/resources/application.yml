@@ -1,0 +1,40 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: scheduling-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/hospital}
+    username: ${DB_USERNAME:hospital}
+    password: ${DB_PASSWORD:local-dev-only}
+  flyway:
+    table: scheduling_flyway_schema_history
+    schemas: scheduling
+    default-schema: scheduling
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.default_schema: scheduling
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:hospital}
+    password: ${RABBITMQ_PASSWORD:local-dev-only}
+    publisher-confirm-type: correlated
+
+outbox:
+  relay-delay-ms: ${OUTBOX_RELAY_DELAY_MS:1000}
+  confirmation-timeout-ms: ${OUTBOX_CONFIRMATION_TIMEOUT_MS:5000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

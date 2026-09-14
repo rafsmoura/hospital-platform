@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: history-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/hospital}
+    username: ${DB_USERNAME:hospital}
+    password: ${DB_PASSWORD:local-dev-only}
+  flyway:
+    table: history_flyway_schema_history
+    schemas: history
+    default-schema: history
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.default_schema: history
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:hospital}
+    password: ${RABBITMQ_PASSWORD:local-dev-only}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        default-requeue-rejected: false
+  graphql:
+    path: /graphql
+    graphiql:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

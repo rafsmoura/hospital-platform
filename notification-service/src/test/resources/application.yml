@@ -1,0 +1,20 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:notification;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    table: notification_flyway_schema_history
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  rabbitmq:
+    username: hospital
+    password: local-dev-only
+    listener:
+      simple:
+        auto-startup: false
