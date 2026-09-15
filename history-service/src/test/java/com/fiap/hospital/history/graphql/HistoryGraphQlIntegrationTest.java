@@ -12,10 +12,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -100,11 +102,47 @@ class HistoryGraphQlIntegrationTest {
     }
 
     @Test
+    void invalidPatientIdReturnsBadRequestWithoutStackTrace() throws Exception {
+        assertInvalidRequest(
+                "{ patientHistory(patientId: \"not-a-uuid\") { id } }",
+                "patientHistory");
+    }
+
+    @Test
+    void invalidFromReturnsBadRequestWithoutStackTrace() throws Exception {
+        assertInvalidRequest(
+                "{ patientHistory(patientId: \"" + PATIENT_ID + "\", from: \"not-an-instant\") { id } }",
+                "patientHistory");
+    }
+
+    @Test
+    void invalidAppointmentIdReturnsBadRequestWithoutStackTrace() throws Exception {
+        assertInvalidRequest(
+                "{ appointment(id: \"not-a-uuid\") { id } }",
+                "appointment");
+    }
+
+    @Test
     void graphqlEndpointRequiresAuthentication() throws Exception {
         String body = "{\"query\":\"{ patientHistory(patientId: \\\"" + PATIENT_ID + "\\\") { id } }\"}";
 
         mockMvc.perform(post("/graphql").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private void assertInvalidRequest(String query, String field) throws Exception {
+        String body = "{\"query\":\"" + query.replace("\"", "\\\"") + "\"}";
+
+        MvcResult result = mockMvc.perform(post("/graphql").with(httpBasic("medico", "password"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors[0].message").value("Invalid request parameters"))
+                .andExpect(jsonPath("$.errors[0].extensions.classification").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.data." + field).doesNotExist())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .doesNotContain("trace", "stackTrace");
     }
 
     private AppointmentEvent event(UUID appointmentId, UUID patientId, Instant scheduledAt, String notes) {
