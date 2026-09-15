@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -73,6 +74,18 @@ class AppointmentQueryControllerIntegrationTest {
                 .andExpect(jsonPath("$.error").value("Appointment not found"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString(unknownId))));
+    }
+
+    @Test
+    void staffInvalidUuidReturnsBadRequestWithoutStackTrace() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/appointments/not-a-uuid")
+                        .with(httpBasic("enfermeiro", "password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request parameters"))
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .doesNotContain("trace", "stackTrace");
     }
 
     private Appointment create() {

@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -124,6 +125,35 @@ class AppointmentCreationControllerIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         assertThat(appointments.count()).isEqualTo(before);
+    }
+
+    @Test
+    void malformedJsonReturnsBadRequestWithoutStackTrace() throws Exception {
+        assertBadRequestWithoutStackTrace(
+                "{\"patientId\":\"" + PATIENT_ID + "\",\"doctorId\":\"" + DOCTOR_ID
+                        + "\",\"scheduledAt\":\"2030-01-01T10:00:00Z\"");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"patientId\":\"not-a-uuid\",\"doctorId\":\"00000000-0000-0000-0000-000000000002\",\"scheduledAt\":\"2030-01-01T10:00:00Z\"}",
+            "{\"patientId\":\"00000000-0000-0000-0000-000000000004\",\"doctorId\":\"00000000-0000-0000-0000-000000000002\",\"scheduledAt\":\"not-an-instant\"}"
+    })
+    void invalidUuidOrDateReturnsBadRequestWithoutStackTrace(String request) throws Exception {
+        assertBadRequestWithoutStackTrace(request);
+    }
+
+    private void assertBadRequestWithoutStackTrace(String request) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/appointments")
+                        .with(httpBasic("enfermeiro", "password"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request parameters"))
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .doesNotContain("trace", "stackTrace");
     }
 
     private String request(UUID patientId, UUID doctorId, Instant scheduledAt, String status, String notes)
